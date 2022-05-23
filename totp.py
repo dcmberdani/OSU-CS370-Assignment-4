@@ -1,22 +1,19 @@
-import argparse #arguments
-import qrcode #qr codes
+import argparse #For arguments/flags
+import qrcode #For qr codes
 
-import struct # Ordering bytes of a  
-
-#Generating a random string in b32
+#For generating a random string in b32
 import random 
 import base64
 
-#For time counter
-import time
+import time #For time counter
 
 #For HOTP
 import hashlib #SHA1 used for the MAC
 import hmac
+import struct
 
 # For Passwords
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-
 
 parser = argparse.ArgumentParser(description = "Just parses the arguments")
 parser.add_argument("--generate-qr", help="Mode used in order to generate a key/QR pair and save them to here.", action='store_true')
@@ -44,6 +41,7 @@ def encryptsec(password, secret):
     return encstr
 
 def decryptsec(password, secret): 
+    password = password[:16] #cut off long passwords
     paddedpass = password.ljust(16, 'A')
     cipher = Cipher(algorithms.AES(paddedpass.encode('utf-8')), modes.ECB())
     decryptor = cipher.decryptor() 
@@ -81,12 +79,8 @@ def genqr():
     #Format for the thing we're storing in a qr code
     #   otpauth://TYPE/LABEL?PARAMETERS
     #   otpauth://totp/Example:alice@google.com?secret=JBSWY3DPEHPK3PXP&issuer=Example
-    keyformat = 'otpauth://totp/'
-    username = 'AwesomeCoolUser'
     secretcode = genb32str()  # random b32 value
-    label = 'CS370:' + username 
-    secret = 'secret=' + secretcode
-    finalURL = keyformat + label + '?' + secret + '&issuer=Example&period=30'
+    finalURL = 'otpauth://totp/CS370:Beaver?secret=' + secretcode + '&issuer=OSU&period=30'
     
     #Once the key is made, then make the qrcode; Save the qrcode/secretkey
     print("URL for QR: " + finalURL)

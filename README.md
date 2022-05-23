@@ -4,7 +4,7 @@ Assignment: TOTP (3)
 
 This program works as outlined in the requirements.
 To execute the program in qr generation mode, type: 'python3 ./totp.py --generate-qr'
-    This mode will generate a random base32 'secret' and form URI
+    This mode will generate a random base32 'secret' and full URI according to given documentation
         The 'secret' will be placed in a text file called 'secret.txt'
     A QR code corresponding to the URI will be generated and stored in 'testqr.jpg'
 
@@ -16,16 +16,16 @@ To execute the program in qr generation mode, type: 'python3 ./totp.py --generat
 To execute the program in OTP generation mode, type: 'python3 ./totp.py --get-otp'
     This mode will generate the TOTP corresponding to the secret in secret.txt
         The mode will also print the remaining time for which the TOTP is active
-        Then, the program will sleep until it expires
+        Then, the program will sleep until the TOTP expires
 
     Once the initial TOTP expires, a the new TOTP will automatically be printed
-        THIS IS AN INFINITE LOOP; There is no way to exit this unless the program is interrupted. 
+    THIS IS AN INFINITE LOOP; There is no way to exit this unless the program is interrupted. 
 
 
 FOR PASSWORDS:
     To use a password protected secret, add the -p flag to the QR generation mode
-        Visually: 'python3 ./totp.py --generate-qr -f'
-        You will be asked to type in a password for the file. It needs to be under 16 chars long because I'm lazy :) 
+        Visually: 'python3 ./totp.py --generate-qr -p'
+        You will be asked to type in a password for the file. It needs to be under 16 chars long or it'll be cut. 
         The password is used to encrypt the secret, but it is not stored locally. You must remember it. 
 
     When calling the OTP generation mode, no flag needs to be specified.
