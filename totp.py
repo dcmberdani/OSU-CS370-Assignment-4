@@ -14,10 +14,13 @@ import time
 import hashlib #SHA1 used for the MAC
 import hmac
 
-import pyotp # for testing
+# For Passwords
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 
 parser = argparse.ArgumentParser(description = "Just parses the arguments")
 parser.add_argument("--generate-qr", help="Mode used in order to generate a key/QR pair and save them to here.", action='store_true')
+parser.add_argument("-p", help="Flag used to see if the user wants to store a password protected file or not.", action='store_true')
 parser.add_argument("--get-otp", help="Mode used to generate an OTP corresponding to the previously generated key.", action='store_true')
 args = parser.parse_args()
 
@@ -27,6 +30,52 @@ def genb32str():
     randstr =  randb32bytes.decode('utf-8') # Gets the string equivalent of a 32-bit nm 
     return randstr
 
+#Source for idea of how to do password stuff: Nathan Lim in the discord
+def encryptsec(password, secret): 
+    password = password[:16] #cut off long passwords
+    paddedpass = password.ljust(16, 'A')
+    cipher = Cipher(algorithms.AES(paddedpass.encode('utf-8')), modes.ECB())
+    encryptor = cipher.encryptor() 
+    toenc = "!NOW--DECRYPTED!" + secret  # Added additional part to allow for identification
+    encpass = encryptor.update(toenc.encode('utf-8')) + encryptor.finalize()
+    #Store the encrypted password in base64
+    encstr = base64.b64encode(encpass).decode('utf-8')
+        
+    return encstr
+
+def decryptsec(password, secret): 
+    paddedpass = password.ljust(16, 'A')
+    cipher = Cipher(algorithms.AES(paddedpass.encode('utf-8')), modes.ECB())
+    decryptor = cipher.decryptor() 
+    # Get the ciphertext stored in base64, then reverse the encryption
+    decpass = decryptor.update(base64.b64decode(secret)) + decryptor.finalize()
+    
+    #This can crash, meaning a bad decode; If this happens, then return error
+    try:
+        decstr = decpass.decode('utf-8')
+    except:
+        print("That is an incorrect password. Exiting.")
+        exit()
+    
+    #Check the first 16 chars for the flag; If it's there, return the secret; If not, exit
+    if (decstr[:16] == '!NOW--DECRYPTED!'):
+        return decstr[16:]
+    else: 
+        print("That is an incorrect password. Exiting.")
+        exit()
+    
+
+def getsecret(): 
+    with open("./secret.txt") as f:
+       secretkey = f.readline().strip()
+       if (secretkey == "!ENCRYPTED!"):
+           secretkey = f.readline().strip()
+           password = input("Type in a password for the file is the password for the file: ")
+           secretkey = decryptsec(password, secretkey)
+    #Grab the key, works both with and without a password
+    return secretkey
+
+    
 #Generates a QR line according to the 
 def genqr():
     #Format for the thing we're storing in a qr code
@@ -42,8 +91,15 @@ def genqr():
     #Once the key is made, then make the qrcode; Save the qrcode/secretkey
     print("URL for QR: " + finalURL)
     
-    with open('./secret.txt', 'w') as f:
-        f.write(secretcode)
+    if args.p:
+        password = input("Type in a password UNDER 16 CHARS for 'secret.txt': ")
+        encsecret = encryptsec(password, secretcode)
+        with open('./secret.txt', 'w') as f:
+            f.write("!ENCRYPTED!\n")
+            f.write(encsecret)
+    else:
+        with open('./secret.txt', 'w') as f:
+            f.write(secretcode)
     
     img = qrcode.make(finalURL)
     img.save("qrcode.jpg")
@@ -70,10 +126,8 @@ def genctr():
     return (ctr, remtime)
     
     
-def genhotp(ctr):
+def genhotp(ctr, secretkey):
     # MASSIVELY USEFUL SOURCE: https://datatracker.ietf.org/doc/html/rfc4226
-    with open("./secret.txt") as f:
-       secretkey = f.read()
 
     # Get the key/ctr bytes to prepare for hashing
     keybytes = base64.b32decode(secretkey)
@@ -103,10 +157,12 @@ def genhotp(ctr):
     return finalint
 
 #Combines the counter and hotp functions to generate the full totp
-def gentotp():   
+def gentotp():
+    #Get secret before loop since it's a one-time thing;
+    secret = getsecret()   
     while (1):
         timetuple = genctr()
-        totp = genhotp(timetuple[0])
+        totp = genhotp(timetuple[0], secret)
         print("TOTP: " + f"{totp:06d}" + '\n') # Print leading 0s: https://stackoverflow.com/questions/134934/display-number-with-leading-zeros
         #After printing out the code, wait until it expires then repeat.
         time.sleep(timetuple[1]) 
