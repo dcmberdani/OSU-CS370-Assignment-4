@@ -1,11 +1,7 @@
-import argparse
-from email.mime import base #arguments
-import hashlib
-from sys import byteorder
-from tkinter.tix import Tree #arguments
+import argparse #arguments
 import qrcode #qr codes
 
-import struct # Another byteorder 
+import struct # Ordering bytes of a  
 
 #Generating a random string in b32
 import random 
@@ -15,7 +11,7 @@ import base64
 import time
 
 #For HOTP
-from hashlib import sha1
+import hashlib #SHA1 used for the MAC
 import hmac
 
 import pyotp # for testing
@@ -31,33 +27,32 @@ def genb32str():
     randstr =  randb32bytes.decode('utf-8') # Gets the string equivalent of a 32-bit nm 
     return randstr
 
+#Generates a QR line according to the 
 def genqr():
     #Format for the thing we're storing in a qr code
     #   otpauth://TYPE/LABEL?PARAMETERS
     #   otpauth://totp/Example:alice@google.com?secret=JBSWY3DPEHPK3PXP&issuer=Example
     keyformat = 'otpauth://totp/'
-    username = 'TestUser2'
-    #secretcode = genb32str()  # random b32 value
-    secretcode = 'ABCDEFGHIJKLMNOP' #non-random b32 value
-    label = 'TestOrg:' + username 
+    username = 'AwesomeCoolUser'
+    secretcode = genb32str()  # random b32 value
+    label = 'CS370:' + username 
     secret = 'secret=' + secretcode
-    finalKey = keyformat + label + '?' + secret + '&issuer=Example&period=30'
+    finalURL = keyformat + label + '?' + secret + '&issuer=Example&period=30'
     
     #Once the key is made, then make the qrcode; Save the qrcode/secretkey
-    print(finalKey)
+    print("URL for QR: " + finalURL)
     
     with open('./secret.txt', 'w') as f:
         f.write(secretcode)
     
-    img = qrcode.make(finalKey)
-    img.save("testqr.jpg")
+    img = qrcode.make(finalURL)
+    img.save("qrcode.jpg")
 
 #Generates the counter aspect of the totp
 def genctr():
     #https://datatracker.ietf.org/doc/html/rfc6238
     #First, grab current time and cast it from float to int
     currtime = int(time.time())
-    #print("CURRTIME: " + str(currtime))
     
     #Then, set a time interval; This is 30 seconds
     timeintv = 30
@@ -65,16 +60,18 @@ def genctr():
     
     #Now, calculate the counter value when all these are together;
     #   This number basically generates a new int every 30 seconds that is 1 greater than the last int
+    #Also, calculate the remaining amount of time the code is valid for and print it
+    #   This is timeint - (elapsed time); Elapsed time is simply the mod (not divide) of the ctr operation
     ctr = (currtime - starttime) // timeintv
+    remtime = timeintv - ( (currtime - starttime) % timeintv )
     
-    print(ctr)
+    print("TOTP is valid for " + str(remtime) + " seconds.")
     
-    return ctr
+    return (ctr, remtime)
     
     
 def genhotp(ctr):
     # MASSIVELY USEFUL SOURCE: https://datatracker.ietf.org/doc/html/rfc4226
-    # First grab the key from the file
     with open("./secret.txt") as f:
        secretkey = f.read()
 
@@ -87,14 +84,12 @@ def genhotp(ctr):
 
     #Generate an HMAC with secret key as the key, and the counter as the message
     h = hmac.new(keybytes, msg=ctrbytes, digestmod=hashlib.sha1)
-    #h = hmac.new(base64.b32decode(secretkey), struct.pack('>Q', ctr), hashlib.sha1)
-    
     longhash = h.digest()
 
     #Now truncate the hash according to: https://datatracker.ietf.org/doc/html/rfc4226#section-5.3    
     #Both of these operations are taken almost directly from the above link
     # Grab the last nibble, use that as the offset to grab 4 bytes
-    offset = longhash[len(longhash)-1] & 0xf 
+    offset = longhash[len(longhash) - 1] & 0xf 
     
     # Then, convert those last 4 bytes into an int; MSB is masked (set to 0) as per link requires
     longint = ((longhash[offset] & 0x7f) << 24) \
@@ -104,22 +99,17 @@ def genhotp(ctr):
     
     # Finally, mod by 10^n in order to get a n-digit integer that is used as the code
     finalint = (longint % (1000000))
-    print(finalint)
-    
-    #return finalint
+        
+    return finalint
 
 #Combines the counter and hotp functions to generate the full totp
 def gentotp():   
-    ctr = genctr()
-    totp = genhotp(ctr)
-    
-    print("NOW USING PYOTP")
-    with open('./secret.txt', 'r') as f:
-        secret = f.read()
-    #hotp = pyotp.TOTP("ABCDEFGHIJKLMNOP")
-    ptotp = pyotp.TOTP(secret)
-    print(ptotp.now())
-
+    while (1):
+        timetuple = genctr()
+        totp = genhotp(timetuple[0])
+        print("TOTP: " + f"{totp:06d}" + '\n') # Print leading 0s: https://stackoverflow.com/questions/134934/display-number-with-leading-zeros
+        #After printing out the code, wait until it expires then repeat.
+        time.sleep(timetuple[1]) 
 
 def main():
     if args.generate_qr:
